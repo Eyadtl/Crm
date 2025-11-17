@@ -1,0 +1,1256 @@
+openapi: 3.1.0
+info:
+  title: Arabia Talents CRM API
+  version: 1.0.0
+  description: >
+    REST interface for the Arabia Talents CRM. All endpoints are prefixed with
+    `/api/v1` and respond with JSON payloads.
+servers:
+  - url: https://api.arabiatalentscrm.com/api/v1
+    description: Production
+  - url: https://staging-api.arabiatalentscrm.com/api/v1
+    description: Staging
+tags:
+  - name: Auth
+  - name: Email Accounts
+  - name: Inbox
+  - name: Projects
+  - name: Contacts
+  - name: Dashboards
+  - name: Exports
+  - name: Admin
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: JWT tokens returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      summary: Invalidate the current refresh + access tokens
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/invite:
+    post:
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      summary: Invite a new user to the workspace
+      description: Admin-only route that generates a signed invitation link.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, roles]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                roles:
+                  type: array
+                  items:
+                    type: string
+                    description: Role slug (admin, manager, editor, viewer)
+      responses:
+        '201':
+          description: Invitation created
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/accept-invite:
+    post:
+      tags: [Auth]
+      summary: Accept invitation and set password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, name, password]
+              properties:
+                token:
+                  type: string
+                name:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Invitation accepted
+        '400':
+          $ref: '#/components/responses/ValidationError'
+  /email-accounts:
+    get:
+      tags: [Email Accounts]
+      security: [{ bearerAuth: [] }]
+      summary: List configured email accounts
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Paginated collection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmailAccounts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Email Accounts]
+      security: [{ bearerAuth: [] }]
+      summary: Create an IMAP/SMTP account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailAccountInput'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailAccount'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /email-accounts/{id}/test:
+    post:
+      tags: [Email Accounts]
+      security: [{ bearerAuth: [] }]
+      summary: Perform IMAP and SMTP connection tests
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Test result payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [passed, failed]
+                  message:
+                    type: string
+                  last_run_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /email-accounts/{id}:
+    patch:
+      tags: [Email Accounts]
+      security: [{ bearerAuth: [] }]
+      summary: Update account settings or enable/disable
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailAccountUpdate'
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailAccount'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /emails:
+    get:
+      tags: [Inbox]
+      security: [{ bearerAuth: [] }]
+      summary: List email metadata
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: search
+          in: query
+          schema:
+            type: string
+            description: Subject and participant search string
+      responses:
+        '200':
+          description: Paginated metadata records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /emails/{id}:
+    get:
+      tags: [Inbox]
+      security: [{ bearerAuth: [] }]
+      summary: Retrieve a single email with cached body info
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Email payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Email'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /emails/{id}/fetch-body:
+    post:
+      tags: [Inbox]
+      security: [{ bearerAuth: [] }]
+      summary: Queue FetchBodyJob for stale/missing cache
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '202':
+          description: Job queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [queued]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /emails/{id}/reply:
+    post:
+      tags: [Inbox]
+      security: [{ bearerAuth: [] }]
+      summary: Reply to a message using linked SMTP credentials
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComposeMessageInput'
+      responses:
+        '202':
+          description: Send job queued
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /emails/{id}/forward:
+    post:
+      tags: [Inbox]
+      security: [{ bearerAuth: [] }]
+      summary: Forward a message to external recipients
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComposeMessageInput'
+      responses:
+        '202':
+          description: Send job queued
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects:
+    get:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: List projects/deals
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: status_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: owner_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: updated_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Paginated projects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjects'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: Create a manual project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectInput'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: Retrieve project detail
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: Update project status/ownership/notes
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectUpdate'
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/from-email/{email_id}:
+    post:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: Create a project seeded from an email
+      parameters:
+        - name: email_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectFromEmailInput'
+      responses:
+        '201':
+          description: Project created and linked
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /projects/{id}/emails:
+    post:
+      tags: [Projects]
+      security: [{ bearerAuth: [] }]
+      summary: Link an email with an existing project
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email_id]
+              properties:
+                email_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Link created
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /contacts:
+    get:
+      tags: [Contacts]
+      security: [{ bearerAuth: [] }]
+      summary: List contacts
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+        - name: email
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated contacts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContacts'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /contacts/{id}:
+    get:
+      tags: [Contacts]
+      security: [{ bearerAuth: [] }]
+      summary: Retrieve a contact
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Contact payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Contacts]
+      security: [{ bearerAuth: [] }]
+      summary: Update contact profile
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactUpdate'
+      responses:
+        '200':
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contact'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /dashboards/summary:
+    get:
+      tags: [Dashboards]
+      security: [{ bearerAuth: [] }]
+      summary: Dashboard aggregates for cards/widgets
+      responses:
+        '200':
+          description: Summary payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /exports/projects:
+    post:
+      tags: [Exports]
+      security: [{ bearerAuth: [] }]
+      summary: Queue a projects CSV export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportFilter'
+      responses:
+        '202':
+          description: Export queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /exports/contacts:
+    post:
+      tags: [Exports]
+      security: [{ bearerAuth: [] }]
+      summary: Queue a contacts CSV export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportFilter'
+      responses:
+        '202':
+          description: Export queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /exports/{job_id}:
+    get:
+      tags: [Exports]
+      security: [{ bearerAuth: [] }]
+      summary: Check export status/download URL
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Export payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataExport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /system/health:
+    get:
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      summary: Queue depth + sync health
+      responses:
+        '200':
+          description: Health payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /sync/logs:
+    get:
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      summary: Sync logs filtered by email account
+      parameters:
+        - name: email_account_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Array of sync log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SyncLogEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /system/cron-run:
+    post:
+      tags: [Admin]
+      summary: Supabase cron webhook invoking `php artisan schedule:run`
+      security:
+        - cronHmac: []
+      responses:
+        '202':
+          description: Scheduler triggered
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cronHmac:
+      type: apiKey
+      in: header
+      name: X-Internal-Signature
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPageParam:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+  responses:
+    Unauthorized:
+      description: Authentication failed or missing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Request failed validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+    ValidationErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    PaginatedEmailAccounts:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAccount'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    EmailAccount:
+      type: object
+      required:
+        - id
+        - email
+        - imap_host
+        - smtp_host
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        imap_host:
+          type: string
+        imap_port:
+          type: integer
+        smtp_host:
+          type: string
+        smtp_port:
+          type: integer
+        security_type:
+          type: string
+          enum: [ssl, tls, starttls]
+        auth_type:
+          type: string
+        status:
+          type: string
+          enum: [active, disabled]
+        last_synced_uid:
+          type: integer
+        last_synced_at:
+          type: string
+          format: date-time
+        sync_state:
+          type: string
+          enum: [idle, queued, syncing, warning, error]
+        sync_error:
+          type: string
+        sync_interval_minutes:
+          type: integer
+        retry_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    EmailAccountInput:
+      type: object
+      required:
+        - email
+        - imap_host
+        - imap_port
+        - smtp_host
+        - smtp_port
+        - encrypted_credentials
+      properties:
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        imap_host:
+          type: string
+        imap_port:
+          type: integer
+        smtp_host:
+          type: string
+        smtp_port:
+          type: integer
+        security_type:
+          type: string
+          enum: [ssl, tls, starttls]
+        auth_type:
+          type: string
+        encrypted_credentials:
+          type: object
+        sync_interval_minutes:
+          type: integer
+    EmailAccountUpdate:
+      type: object
+      properties:
+        display_name:
+          type: string
+        encrypted_credentials:
+          type: object
+        status:
+          type: string
+          enum: [active, disabled]
+        sync_interval_minutes:
+          type: integer
+        disabled_reason:
+          type: string
+    PaginatedEmails:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Email'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Email:
+      type: object
+      required: [id, email_account_id, direction, received_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email_account_id:
+          type: string
+          format: uuid
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+        subject:
+          type: string
+        snippet:
+          type: string
+        message_id:
+          type: string
+        thread_id:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+        received_at:
+          type: string
+          format: date-time
+        project_flag:
+          type: boolean
+        body_ref:
+          type: string
+        body_cached_at:
+          type: string
+          format: date-time
+        has_attachments:
+          type: boolean
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailParticipant'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAttachment'
+    EmailParticipant:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [sender, to, cc, bcc]
+        address:
+          type: string
+          format: email
+        name:
+          type: string
+    EmailAttachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+        storage_ref:
+          type: string
+        status:
+          type: string
+          enum: [pending, downloaded, skipped]
+    ComposeMessageInput:
+      type: object
+      required: [from_account_id, to, subject, body]
+      properties:
+        from_account_id:
+          type: string
+          format: uuid
+        to:
+          type: array
+          items:
+            type: string
+            format: email
+        cc:
+          type: array
+          items:
+            type: string
+            format: email
+        bcc:
+          type: array
+          items:
+            type: string
+            format: email
+        subject:
+          type: string
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+            description: Supabase Storage reference
+        project_id:
+          type: string
+          format: uuid
+    PaginatedProjects:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Project:
+      type: object
+      required: [id, deal_name, deal_status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        deal_name:
+          type: string
+        product_name:
+          type: string
+        marketing_manager_id:
+          type: string
+          format: uuid
+        deal_owner_id:
+          type: string
+          format: uuid
+        deal_status:
+          $ref: '#/components/schemas/DealStatus'
+        closed_lost_reason:
+          type: string
+        estimated_value:
+          type: number
+        notes:
+          type: string
+        expected_close_date:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DealStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        position:
+          type: integer
+        is_default:
+          type: boolean
+        is_terminal:
+          type: boolean
+    ProjectInput:
+      type: object
+      required: [deal_name, deal_status_id]
+      properties:
+        deal_name:
+          type: string
+        product_name:
+          type: string
+        marketing_manager_id:
+          type: string
+          format: uuid
+        deal_owner_id:
+          type: string
+          format: uuid
+        deal_status_id:
+          type: string
+          format: uuid
+        estimated_value:
+          type: number
+        notes:
+          type: string
+        expected_close_date:
+          type: string
+          format: date
+    ProjectUpdate:
+      type: object
+      properties:
+        deal_name:
+          type: string
+        deal_owner_id:
+          type: string
+          format: uuid
+        marketing_manager_id:
+          type: string
+          format: uuid
+        deal_status_id:
+          type: string
+          format: uuid
+        closed_lost_reason:
+          type: string
+        estimated_value:
+          type: number
+        notes:
+          type: string
+    ProjectFromEmailInput:
+      type: object
+      required: [deal_name, deal_status_id]
+      properties:
+        deal_name:
+          type: string
+        deal_status_id:
+          type: string
+          format: uuid
+        owner_id:
+          type: string
+          format: uuid
+        estimated_value:
+          type: number
+        notes:
+          type: string
+    PaginatedContacts:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contact'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    Contact:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ContactUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+    DashboardSummary:
+      type: object
+      properties:
+        total_projects:
+          type: integer
+        projects_by_status:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              count:
+                type: integer
+        top_contacts:
+          type: array
+          items:
+            type: object
+            properties:
+              contact_id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              email:
+                type: string
+              email_count:
+                type: integer
+        latest_emails:
+          type: array
+          items:
+            $ref: '#/components/schemas/Email'
+    ExportFilter:
+      type: object
+      properties:
+        filters:
+          type: object
+          additionalProperties: true
+    DataExport:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [projects, contacts]
+        status:
+          type: string
+          enum: [queued, running, ready, failed]
+        requested_by:
+          type: string
+          format: uuid
+        storage_ref:
+          type: string
+        download_url:
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    SystemHealth:
+      type: object
+      properties:
+        queue_backlog:
+          type: object
+          additionalProperties:
+            type: integer
+        failing_accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              email_account_id:
+                type: string
+                format: uuid
+              sync_state:
+                type: string
+              last_error:
+                type: string
+        last_cron_run_at:
+          type: string
+          format: date-time
+        database_connections:
+          type: integer
+        uptime_seconds:
+          type: integer
+    SyncLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email_account_id:
+          type: string
+          format: uuid
+        event:
+          type: string
+        message:
+          type: string
+        context:
+          type: object
+        created_at:
+          type: string
+          format: date-time
