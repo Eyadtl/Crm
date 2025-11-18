@@ -38,6 +38,7 @@ class SystemHealthService
     {
         try {
             $result = DB::selectOne('select sum(numbackends) as total from pg_stat_database');
+
             return $result?->total ? (int) $result->total : null;
         } catch (\Throwable) {
             return null;

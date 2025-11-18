@@ -28,7 +28,7 @@ class DispatchMailboxSyncCommand extends Command
                         return false;
                     }
 
-                    if (!$account->shouldSync($now)) {
+                    if (! $account->shouldSync($now)) {
                         continue;
                     }
 

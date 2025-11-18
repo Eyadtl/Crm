@@ -58,6 +58,7 @@ class ProjectController extends Controller
     public function show(Project $project)
     {
         $project->load(['status', 'emails', 'contacts']);
+
         return new ProjectResource($project);
     }
 

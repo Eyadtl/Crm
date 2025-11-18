@@ -8,9 +8,7 @@ use Throwable;
 
 class EmailConnectivityService
 {
-    public function __construct(private readonly MailboxConnectionManager $connections)
-    {
-    }
+    public function __construct(private readonly MailboxConnectionManager $connections) {}
 
     public function test(EmailAccount $account, array $credentials): array
     {

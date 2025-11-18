@@ -13,7 +13,7 @@ class VerifyCronSignature
         $sharedSecret = config('app.cron_shared_secret', env('CRON_SHARED_SECRET'));
         $signature = $request->header('X-Internal-Signature');
 
-        if (!$sharedSecret || !hash_equals($sharedSecret, (string) $signature)) {
+        if (! $sharedSecret || ! hash_equals($sharedSecret, (string) $signature)) {
             abort(Response::HTTP_UNAUTHORIZED, 'Invalid cron signature.');
         }
 

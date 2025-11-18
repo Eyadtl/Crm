@@ -14,6 +14,11 @@ const InboxPage = () => {
     queryFn: () => fetchEmails({ page, search: search || undefined }),
   });
 
+  if (import.meta.env.DEV) {
+    console.debug('[Inbox] query params', { page, search });
+    console.debug('[Inbox] response payload', data);
+  }
+
   const emails = data?.data ?? [];
   const meta = data?.meta;
 

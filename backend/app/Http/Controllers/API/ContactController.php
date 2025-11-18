@@ -32,6 +32,7 @@ class ContactController extends Controller
     public function show(Contact $contact)
     {
         $contact->load('projects');
+
         return new ContactResource($contact);
     }
 

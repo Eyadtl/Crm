@@ -27,3 +27,8 @@ export const testEmailAccount = async (id: string) => {
   const { data } = await apiClient.post(`/email-accounts/${id}/test`);
   return data;
 };
+
+export const syncEmailAccount = async (id: string) => {
+  const { data } = await apiClient.post(`/email-accounts/${id}/sync`);
+  return data;
+};

@@ -8,7 +8,6 @@ use App\Models\EmailAttachment;
 use App\Models\MailboxLock;
 use App\Models\SyncLog;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -17,38 +16,37 @@ use Webklex\PHPIMAP\Message;
 
 class MailboxSyncService
 {
-    public function __construct(private readonly MailboxConnectionManager $connections)
-    {
-    }
+    public function __construct(private readonly MailboxConnectionManager $connections) {}
 
-    public function sync(EmailAccount $account): void
+    public function sync(EmailAccount $account): int
     {
         $lock = $this->acquireLock($account);
         $client = null;
+        $processedCount = 0;
 
         try {
-            DB::transaction(function () use ($account) {
-                $account->forceFill([
-                    'sync_state' => 'syncing',
-                    'last_synced_at' => now(),
-                    'sync_error' => null,
-                ])->save();
+            $account->forceFill([
+                'sync_state' => 'syncing',
+                'last_synced_at' => now(),
+                'sync_error' => null,
+            ])->save();
 
-                SyncLog::create([
-                    'email_account_id' => $account->id,
-                    'event' => 'sync_started',
-                    'message' => 'Sync triggered via scheduler',
-                ]);
-            });
+            SyncLog::create([
+                'email_account_id' => $account->id,
+                'event' => 'sync_started',
+                'message' => 'Sync triggered via scheduler',
+            ]);
 
             if (config('mailboxes.fake_sync')) {
                 $this->markSuccess($account, $account->last_synced_uid);
-                return;
+
+                return 0;
             }
 
             $client = $this->connections->makeImapClient($account);
             $folder = $client->getFolder(config('mailboxes.default_folder', 'INBOX'));
             $messages = $this->fetchMessages($folder, $account);
+            $processedCount = $messages->count();
 
             $lastUid = $account->last_synced_uid;
             foreach ($messages as $message) {
@@ -85,6 +83,8 @@ class MailboxSyncService
 
             $this->releaseLock($lock);
         }
+
+        return $processedCount;
     }
 
     protected function fetchMessages($folder, EmailAccount $account): Collection
@@ -94,27 +94,34 @@ class MailboxSyncService
             config('mailboxes.max_messages_per_sync', config('mailboxes.fetch_chunk_size', 50))
         );
 
-        $query = $folder->messages()
-            ->leaveUnread()
-            ->setFetchOrder(IMAP::FT_UID)
-            ->limit($limit);
-
-        $since = $this->determineSince($account);
-        if ($since) {
-            $query->since($since);
+        // Use simpler query that works with Gmail
+        // Fetch with limit to avoid memory issues
+        try {
+            $messages = collect($folder->messages()
+                ->all()
+                ->limit($limit, 1)  // Fetch only the limit, starting from page 1
+                ->get() ?? []);
+        } catch (\Throwable $e) {
+            Log::error('Failed to fetch messages', [
+                'account_id' => $account->id,
+                'error' => $e->getMessage(),
+            ]);
+            return collect([]);
         }
 
-        $messages = collect($query->get() ?? []);
-
-        if ($account->last_synced_uid) {
+        // Filter by UID if we've synced before
+        if ($account->last_synced_uid > 0) {
             $messages = $messages->filter(function (Message $message) use ($account) {
                 return (int) $message->getUid() > (int) $account->last_synced_uid;
             });
         }
 
-        return $messages->sortBy(function (Message $message) {
+        // Sort by UID
+        $messages = $messages->sortBy(function (Message $message) {
             return (int) $message->getUid();
         })->values();
+
+        return $messages;
     }
 
     protected function determineSince(EmailAccount $account): ?string
@@ -129,7 +136,13 @@ class MailboxSyncService
     protected function storeMessage(EmailAccount $account, Message $message): Email
     {
         $messageId = $this->resolveMessageId($message);
-        $receivedAt = optional($message->getDate())?->setTimezone('UTC') ?? now();
+
+        // Get date and convert to Carbon instance properly
+        $dateAttr = $message->getDate();
+        $receivedAt = $dateAttr && method_exists($dateAttr, 'toDate')
+            ? \Carbon\Carbon::parse($dateAttr->toDate())->setTimezone('UTC')
+            : now();
+
         $snippet = $this->buildSnippet($message);
 
         $threadId = method_exists($message, 'getThreadId') ? $message->getThreadId() : null;
@@ -142,9 +155,9 @@ class MailboxSyncService
             [
                 'thread_id' => $threadId ?? $message->getMessageId(),
                 'direction' => 'incoming',
-                'subject' => $message->getSubject(),
+                'subject' => Str::limit($message->getSubject() ?? '', 255, ''),
                 'snippet' => $snippet,
-                'sent_at' => optional($message->getDate())?->setTimezone('UTC'),
+                'sent_at' => $receivedAt,  // Use the same processed date
                 'received_at' => $receivedAt,
                 'size_bytes' => $message->getSize(),
                 'sync_id' => (string) $message->getUid(),
@@ -170,7 +183,7 @@ class MailboxSyncService
 
     protected function storeAddresses(Email $email, string $type, $addresses): void
     {
-        if (!$addresses) {
+        if (! $addresses) {
             return;
         }
 

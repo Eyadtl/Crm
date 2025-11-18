@@ -4,7 +4,6 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DashboardSummaryResource;
-use App\Http\Resources\EmailResource;
 use App\Models\Contact;
 use App\Models\Email;
 use App\Models\Project;

@@ -12,9 +12,7 @@ class UserInvitationMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    public function __construct(public AuthInvitation $invitation)
-    {
-    }
+    public function __construct(public AuthInvitation $invitation) {}
 
     public function build(): self
     {

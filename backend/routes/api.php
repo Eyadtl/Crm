@@ -22,6 +22,7 @@ Route::prefix('v1')->group(function () {
         Route::post('email-accounts', [EmailAccountController::class, 'store']);
         Route::patch('email-accounts/{emailAccount}', [EmailAccountController::class, 'update']);
         Route::post('email-accounts/{emailAccount}/test', [EmailAccountController::class, 'test']);
+        Route::post('email-accounts/{emailAccount}/sync', [EmailAccountController::class, 'sync']);
 
         Route::get('emails', [EmailController::class, 'index']);
         Route::get('emails/{email}', [EmailController::class, 'show']);

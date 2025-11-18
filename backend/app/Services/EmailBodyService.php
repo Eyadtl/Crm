@@ -12,9 +12,7 @@ use Webklex\PHPIMAP\Message;
 
 class EmailBodyService
 {
-    public function __construct(private readonly MailboxConnectionManager $connections)
-    {
-    }
+    public function __construct(private readonly MailboxConnectionManager $connections) {}
 
     public function fetchAndCache(Email $email): void
     {
@@ -22,6 +20,7 @@ class EmailBodyService
 
         if (config('mailboxes.fake_sync')) {
             $this->cachePlaceholder($email);
+
             return;
         }
 
@@ -29,7 +28,7 @@ class EmailBodyService
         $folder = $client->getFolder(config('mailboxes.default_folder', 'INBOX'));
         $message = $this->locateMessage($folder, $email);
 
-        if (!$message) {
+        if (! $message) {
             $client->disconnect();
             throw new RuntimeException('Unable to locate email on IMAP server.');
         }

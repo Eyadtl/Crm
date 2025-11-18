@@ -52,8 +52,8 @@ return [
     |
     */
 
-'url' => env('APP_URL', 'http://localhost'),
-'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    'url' => env('APP_URL', 'http://localhost'),
+    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
     /*
     |--------------------------------------------------------------------------
@@ -119,11 +119,11 @@ return [
     |
     */
 
-'maintenance' => [
-    'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
-    'store' => env('APP_MAINTENANCE_STORE', 'database'),
-],
+    'maintenance' => [
+        'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
+        'store' => env('APP_MAINTENANCE_STORE', 'database'),
+    ],
 
-'cron_shared_secret' => env('CRON_SHARED_SECRET'),
+    'cron_shared_secret' => env('CRON_SHARED_SECRET'),
 
 ];

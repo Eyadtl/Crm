@@ -11,9 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 class SystemController extends Controller
 {
-    public function __construct(private readonly SystemHealthService $healthService)
-    {
-    }
+    public function __construct(private readonly SystemHealthService $healthService) {}
 
     public function health()
     {

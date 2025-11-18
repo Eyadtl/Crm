@@ -25,7 +25,7 @@ class AuthController extends Controller
     {
         $user = User::query()->with('roles')->where('email', $request->validated('email'))->first();
 
-        if (!$user || !Hash::check($request->validated('password'), $user->password_hash)) {
+        if (! $user || ! Hash::check($request->validated('password'), $user->password_hash)) {
             return response()->json(['message' => 'Invalid credentials'], Response::HTTP_UNAUTHORIZED);
         }
 

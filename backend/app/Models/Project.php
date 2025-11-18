@@ -2,11 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\ActivityLog;
-use App\Models\Contact;
-use App\Models\DealStatus;
-use App\Models\Email;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

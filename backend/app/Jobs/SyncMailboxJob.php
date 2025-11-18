@@ -9,6 +9,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class SyncMailboxJob implements ShouldQueue
 {
@@ -29,6 +30,11 @@ class SyncMailboxJob implements ShouldQueue
     public function handle(MailboxSyncService $syncService): void
     {
         $account = EmailAccount::query()->findOrFail($this->emailAccountId);
-        $syncService->sync($account);
+        $processed = $syncService->sync($account);
+
+        Log::info('Mailbox synced via queue job', [
+            'email_account_id' => $account->id,
+            'processed_messages' => $processed,
+        ]);
     }
 }

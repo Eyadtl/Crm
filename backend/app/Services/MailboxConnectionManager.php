@@ -12,9 +12,7 @@ use Webklex\PHPIMAP\ClientManager;
 
 class MailboxConnectionManager
 {
-    public function __construct(private readonly ClientManager $clientManager)
-    {
-    }
+    public function __construct(private readonly ClientManager $clientManager) {}
 
     public function decryptCredentials(EmailAccount $account): array
     {
@@ -59,18 +57,18 @@ class MailboxConnectionManager
 
         $encrypted = $account->security_type === 'ssl';
         $transport = new EsmtpTransport($account->smtp_host, $account->smtp_port, $encrypted);
-
-        if (in_array($account->security_type, ['tls', 'starttls'], true)) {
-            $transport->setEncryption('tls');
-        } elseif ($account->security_type === 'ssl') {
-            $transport->setEncryption('ssl');
-        }
+        $usesStartTls = in_array($account->security_type, ['tls', 'starttls'], true);
+        $transport->setAutoTls($usesStartTls);
+        $transport->setRequireTls($account->security_type === 'starttls');
 
         $transport->setUsername($credentials['username']);
         $transport->setPassword($credentials['password']);
-        $transport->setTimeout(config('mailboxes.smtp_timeout', 60));
 
-        if (!config('mailboxes.smtp_validate_cert', true)) {
+        if ($stream = $transport->getStream()) {
+            $stream->setTimeout(config('mailboxes.smtp_timeout', 60));
+        }
+
+        if (! config('mailboxes.smtp_validate_cert', true)) {
             $transport->setStreamOptions([
                 'ssl' => [
                     'allow_self_signed' => true,

@@ -83,7 +83,7 @@ class EmailAccount extends Model
             return false;
         }
 
-        if (!$this->last_synced_at) {
+        if (! $this->last_synced_at) {
             return true;
         }
 

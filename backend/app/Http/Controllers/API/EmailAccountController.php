@@ -8,16 +8,17 @@ use App\Http\Requests\EmailAccountUpdateRequest;
 use App\Http\Resources\EmailAccountResource;
 use App\Models\EmailAccount;
 use App\Services\EmailConnectivityService;
+use App\Services\MailboxSyncService;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class EmailAccountController extends Controller
 {
-    public function __construct(private readonly EmailConnectivityService $connectivityService)
-    {
-    }
+    public function __construct(private readonly EmailConnectivityService $connectivityService) {}
 
     public function index(Request $request)
     {
@@ -90,13 +91,45 @@ class EmailAccountController extends Controller
     {
         Gate::authorize('manage-email-accounts');
 
-        $credentials = [
-            'username' => Crypt::decryptString($emailAccount->encrypted_credentials['username']),
-            'password' => Crypt::decryptString($emailAccount->encrypted_credentials['password']),
-        ];
+        try {
+            $credentials = [
+                'username' => Crypt::decryptString($emailAccount->encrypted_credentials['username']),
+                'password' => Crypt::decryptString($emailAccount->encrypted_credentials['password']),
+            ];
+        } catch (DecryptException $exception) {
+            report($exception);
+
+            return response()->json([
+                'status' => 'failed',
+                'message' => 'Stored credentials could not be decrypted. Please update the credentials and try again.',
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
         $result = $this->connectivityService->test($emailAccount, $credentials);
 
         return response()->json($result);
+    }
+
+    public function sync(EmailAccount $emailAccount, MailboxSyncService $syncService)
+    {
+        Gate::authorize('manage-email-accounts');
+
+        try {
+            $processed = $syncService->sync($emailAccount);
+
+            return response()->json([
+                'status' => 'passed',
+                'message' => "Synced {$processed} new message(s).",
+                'processed' => $processed,
+                'synced_at' => now()->toIso8601String(),
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'status' => 'failed',
+                'message' => $exception->getMessage(),
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
     }
 }

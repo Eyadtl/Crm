@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createEmailAccount, fetchEmailAccounts, testEmailAccount } from '../api/emailAccounts';
+import { createEmailAccount, fetchEmailAccounts, syncEmailAccount, testEmailAccount } from '../api/emailAccounts';
 import { Loader } from '../components/feedback/Loader';
 
 const defaultForm = {
@@ -48,6 +49,14 @@ const EmailAccountsPage = () => {
   });
 
   const [testResults, setTestResults] = useState<Record<string, { status: string; message?: string }>>({});
+  const [syncResults, setSyncResults] = useState<Record<string, { status: string; message?: string }>>({});
+
+  const syncMutation = useMutation({
+    mutationFn: (id: string) => syncEmailAccount(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+    },
+  });
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -80,14 +89,27 @@ const EmailAccountsPage = () => {
                       onClick={async () => {
                         try {
                           const result = await testMutation.mutateAsync(account.id);
+                          if (import.meta.env.DEV) {
+                            console.debug('[EmailAccounts] test success', { id: account.id, result });
+                          }
                           setTestResults((prev) => ({
                             ...prev,
                             [account.id]: { status: result.status, message: result.message },
                           }));
-                        } catch {
+                        } catch (error) {
+                          let message = 'Unable to test mailbox.';
+                          if (isAxiosError(error) && error.response?.data) {
+                            message =
+                              (error.response.data.message as string | undefined) ??
+                              (error.response.data.error as string | undefined) ??
+                              message;
+                          }
+                          if (import.meta.env.DEV) {
+                            console.error('[EmailAccounts] test failed', { id: account.id, error, message });
+                          }
                           setTestResults((prev) => ({
                             ...prev,
-                            [account.id]: { status: 'failed', message: 'Unable to test mailbox.' },
+                            [account.id]: { status: 'failed', message },
                           }));
                         }
                       }}
@@ -95,11 +117,51 @@ const EmailAccountsPage = () => {
                     >
                       {testMutation.isPending && testMutation.variables === account.id ? 'Testing...' : 'Test'}
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={async () => {
+                        try {
+                          const result = await syncMutation.mutateAsync(account.id);
+                          if (import.meta.env.DEV) {
+                            console.debug('[EmailAccounts] sync success', { id: account.id, result });
+                          }
+                          setSyncResults((prev) => ({
+                            ...prev,
+                            [account.id]: { status: 'passed', message: result.message },
+                          }));
+                        } catch (error) {
+                          let message = 'Unable to sync mailbox.';
+                          if (isAxiosError(error) && error.response?.data) {
+                            message =
+                              (error.response.data.message as string | undefined) ??
+                              (error.response.data.error as string | undefined) ??
+                              message;
+                          }
+                          if (import.meta.env.DEV) {
+                            console.error('[EmailAccounts] sync failed', { id: account.id, error, message });
+                          }
+                          setSyncResults((prev) => ({
+                            ...prev,
+                            [account.id]: { status: 'failed', message },
+                          }));
+                        }
+                      }}
+                      disabled={syncMutation.isPending && syncMutation.variables === account.id}
+                    >
+                      {syncMutation.isPending && syncMutation.variables === account.id ? 'Syncing...' : 'Sync now'}
+                    </button>
                   </div>
                   {testResults[account.id] && (
                     <p className={`hint hint--${testResults[account.id].status}`}>
                       {testResults[account.id].status === 'passed' ? 'Connectivity OK' : 'Check settings'}
                       {testResults[account.id].message ? ` - ${testResults[account.id].message}` : ''}
+                    </p>
+                  )}
+                  {syncResults[account.id] && (
+                    <p className={`hint hint--${syncResults[account.id].status}`}>
+                      {syncResults[account.id].status === 'passed' ? 'Sync complete' : 'Sync failed'}
+                      {syncResults[account.id].message ? ` - ${syncResults[account.id].message}` : ''}
                     </p>
                   )}
                 </li>

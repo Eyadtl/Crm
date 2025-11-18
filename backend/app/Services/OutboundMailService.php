@@ -13,9 +13,7 @@ use Symfony\Component\Mime\Email as MimeEmail;
 
 class OutboundMailService
 {
-    public function __construct(private readonly MailboxConnectionManager $connections)
-    {
-    }
+    public function __construct(private readonly MailboxConnectionManager $connections) {}
 
     public function send(array $payload): Email
     {
@@ -38,13 +36,13 @@ class OutboundMailService
             'snippet' => Str::limit(strip_tags($payload['body']), 160),
             'sent_at' => now(),
             'received_at' => now(),
-            'has_attachments' => !empty($payload['attachments']),
+            'has_attachments' => ! empty($payload['attachments']),
         ]);
 
         $this->storeOutboundParticipants($email, $account, $payload);
         $this->storeOutboundAttachments($email, $attachments);
 
-        if (!empty($payload['project_id'])) {
+        if (! empty($payload['project_id'])) {
             $email->projects()->syncWithoutDetaching([
                 $payload['project_id'] => [
                     'linked_by' => $payload['user_id'] ?? null,
@@ -63,17 +61,17 @@ class OutboundMailService
 
     protected function buildMessage(EmailAccount $account, array $payload, array $attachments): MimeEmail
     {
-        $message = (new MimeEmail())
+        $message = (new MimeEmail)
             ->subject($payload['subject'])
             ->html($payload['body'])
             ->from(new Address($account->email, $account->display_name))
             ->to(...$this->mapAddresses($payload['to'] ?? []));
 
-        if (!empty($payload['cc'])) {
+        if (! empty($payload['cc'])) {
             $message->cc(...$this->mapAddresses($payload['cc']));
         }
 
-        if (!empty($payload['bcc'])) {
+        if (! empty($payload['bcc'])) {
             $message->bcc(...$this->mapAddresses($payload['bcc']));
         }
 
@@ -81,7 +79,7 @@ class OutboundMailService
             $message->attach($attachment['content'], $attachment['name'], $attachment['mime']);
         }
 
-        if (!empty($payload['parent_email_id'])) {
+        if (! empty($payload['parent_email_id'])) {
             $message->getHeaders()->addTextHeader('In-Reply-To', $payload['parent_email_id']);
         }
 
@@ -100,7 +98,7 @@ class OutboundMailService
     {
         return collect($attachments)
             ->map(function ($encoded) {
-                if (!is_string($encoded) || !str_contains($encoded, ';base64,')) {
+                if (! is_string($encoded) || ! str_contains($encoded, ';base64,')) {
                     return null;
                 }
                 [$meta, $content] = explode(';base64,', $encoded, 2);
