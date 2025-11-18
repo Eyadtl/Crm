@@ -17,7 +17,7 @@ class EmailController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Email::query()->with(['participants', 'attachments'])
+        $query = Email::query()->with(['participants', 'attachments', 'account'])
             ->latest('received_at');
 
         if ($request->filled('account_id')) {

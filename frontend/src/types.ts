@@ -58,6 +58,7 @@ export type EmailAttachment = {
 
 export type Email = {
   id: string;
+  email_account_id?: string;
   subject: string | null;
   snippet: string | null;
   direction: 'incoming' | 'outgoing';
@@ -67,6 +68,7 @@ export type Email = {
   body_cached_at?: string;
   has_attachments: boolean;
   project_flag: boolean;
+  email_account?: EmailAccount;
   participants?: EmailParticipant[];
   attachments?: EmailAttachment[];
 };

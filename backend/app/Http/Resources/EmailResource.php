@@ -22,6 +22,7 @@ class EmailResource extends JsonResource
             'body_cached_at' => optional($this->body_cached_at)->toIso8601String(),
             'has_attachments' => $this->has_attachments,
             'project_flag' => $this->project_flag,
+            'email_account' => EmailAccountResource::make($this->whenLoaded('account')),
             'participants' => EmailParticipantResource::collection($this->whenLoaded('participants')),
             'attachments' => EmailAttachmentResource::collection($this->whenLoaded('attachments')),
             'projects' => ProjectResource::collection($this->whenLoaded('projects')),
