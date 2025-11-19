@@ -19,16 +19,52 @@ const InboxPage = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['emails', page, search, accountId],
     queryFn: () => fetchEmails({ page, search: search || undefined, account_id: accountId || undefined }),
+    staleTime: 0, // Force fresh data every time
+    cacheTime: 0, // Don't cache
   });
 
   if (import.meta.env.DEV) {
-    console.debug('[Inbox] query params', { page, search });
-    console.debug('[Inbox] response payload', data);
+    console.log('%c=== INBOX PAGE DEBUG ===', 'background: #222; color: #bada55; font-size: 14px; font-weight: bold;');
+    console.log('Query params:', { page, search, accountId });
+    console.log('Response payload:', data);
+    console.log('Response meta:', data?.meta);
   }
 
   const emails = data?.data ?? [];
   const meta = data?.meta;
   const accounts = accountsData?.data ?? [];
+
+  // Debug: Log email sorting
+  if (import.meta.env.DEV && emails.length > 0) {
+    console.log('%c=== EMAIL ORDER VERIFICATION ===', 'background: #0066cc; color: white; font-size: 14px; font-weight: bold;');
+    console.log(`Total emails in response: ${emails.length}`);
+    console.log('First 10 emails received from API:');
+    console.table(emails.slice(0, 10).map((email, idx) => ({
+      '#': idx + 1,
+      Subject: email.subject?.substring(0, 50) || 'No subject',
+      'Received At': email.received_at,
+      'Account': email.email_account?.email || 'N/A',
+      'How long ago': email.received_at ? new Date(email.received_at).toLocaleString() : 'N/A'
+    })));
+
+    // Check sort order
+    const sortErrors: string[] = [];
+    emails.forEach((email, idx) => {
+      if (idx === 0) return;
+      const current = new Date(email.received_at || email.created_at);
+      const previous = new Date(emails[idx - 1].received_at || emails[idx - 1].created_at);
+      if (current > previous) {
+        sortErrors.push(`Position ${idx}: ${email.subject} (${email.received_at}) is NEWER than previous email`);
+      }
+    });
+
+    if (sortErrors.length > 0) {
+      console.error('%c❌ SORT ORDER ERRORS DETECTED:', 'color: red; font-weight: bold;');
+      sortErrors.forEach(err => console.error(err));
+    } else {
+      console.log('%c✅ Sort order correct (newest to oldest)', 'color: green; font-weight: bold;');
+    }
+  }
 
   const canGoPrev = meta ? meta.current_page > 1 : page > 1;
   const canGoNext = meta ? meta.current_page < meta.last_page : false;

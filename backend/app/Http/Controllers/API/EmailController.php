@@ -18,7 +18,8 @@ class EmailController extends Controller
     public function index(Request $request)
     {
         $query = Email::query()->with(['participants', 'attachments', 'account'])
-            ->latest('received_at');
+            ->orderBy('received_at', 'desc')
+            ->orderBy('created_at', 'desc');
 
         if ($request->filled('account_id')) {
             $query->where('email_account_id', $request->input('account_id'));
@@ -42,7 +43,33 @@ class EmailController extends Controller
             });
         }
 
+        // Debug logging
+        \Log::info('=== EMAIL QUERY DEBUG ===');
+        \Log::info('Request params:', [
+            'account_id' => $request->input('account_id'),
+            'search' => $request->input('search'),
+            'page' => $request->input('page', 1),
+            'per_page' => $request->integer('per_page', 20)
+        ]);
+        \Log::info('SQL Query: ' . $query->toSql());
+        \Log::info('Bindings: ' . json_encode($query->getBindings()));
+
         $emails = $query->paginate($request->integer('per_page', 20));
+
+        // Log first few emails with their received_at values
+        \Log::info("Total emails found: {$emails->total()}");
+        \Log::info('First 10 emails retrieved (showing received_at):');
+        foreach ($emails->take(10) as $idx => $email) {
+            \Log::info(($idx + 1) . ". Subject: \"{$email->subject}\", received_at: {$email->received_at}, account: {$email->account->email}");
+        }
+
+        // Verify the actual order by checking if sorted correctly
+        $firstEmail = $emails->first();
+        $secondEmail = $emails->skip(1)->first();
+        if ($firstEmail && $secondEmail) {
+            $isCorrectOrder = $firstEmail->received_at >= $secondEmail->received_at;
+            \Log::info("Sort order correct (newest first): " . ($isCorrectOrder ? 'YES' : 'NO'));
+        }
 
         return EmailResource::collection($emails);
     }

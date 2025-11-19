@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(php artisan tinker:*)"
+      "Bash(php artisan tinker:*)",
+      "Bash(php artisan queue:work:*)",
+      "Bash(npm run dev:*)",
+      "Bash(timeout 2 sleep:*)",
+      "Bash(php artisan mailboxes:dispatch-sync:*)",
+      "Bash(php artisan queue:listen:*)",
+      "Bash(php artisan queue:restart:*)"
     ],
     "deny": [],
     "ask": []

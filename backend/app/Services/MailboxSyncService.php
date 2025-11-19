@@ -89,39 +89,93 @@ class MailboxSyncService
 
     protected function fetchMessages($folder, EmailAccount $account): Collection
     {
-        $limit = max(
-            1,
-            config('mailboxes.max_messages_per_sync', config('mailboxes.fetch_chunk_size', 50))
-        );
+        $limit = max(20, (int) config('mailboxes.max_messages_per_sync', 20));
+        $messages = collect();
 
-        // Use simpler query that works with Gmail
-        // Fetch with limit to avoid memory issues
         try {
-            $messages = collect($folder->messages()
-                ->all()
-                ->limit($limit, 1)  // Fetch only the limit, starting from page 1
-                ->get() ?? []);
+            Log::info('MailboxSyncService: Starting fetch', [
+                'account_id' => $account->id,
+                'account_email' => $account->email,
+                'last_synced_uid' => $account->last_synced_uid,
+                'limit' => $limit
+            ]);
+
+            // Use query() without setFetchOrder to avoid BAD errors while being memory efficient
+            $query = $folder->query();
+            $rawMessages = $query->limit($limit)->get();
+            
+            Log::info('MailboxSyncService: Raw IMAP fetch complete', [
+                'account_id' => $account->id,
+                'raw_count' => is_countable($rawMessages) ? count($rawMessages) : 0,
+                'raw_type' => gettype($rawMessages)
+            ]);
+
+            $messages = collect($rawMessages ?? []);
+
+            Log::info('MailboxSyncService: Fetched messages from IMAP', [
+                'account_id' => $account->id,
+                'count' => $messages->count(),
+                'first_uid' => $messages->first()?->getUid(),
+                'last_uid' => $messages->last()?->getUid(),
+            ]);
         } catch (\Throwable $e) {
             Log::error('Failed to fetch messages', [
                 'account_id' => $account->id,
                 'error' => $e->getMessage(),
             ]);
+
             return collect([]);
         }
 
-        // Filter by UID if we've synced before
+        // Filter by UID if we've synced before (extra safety in case server ignores UID query)
         if ($account->last_synced_uid > 0) {
+            Log::info('MailboxSyncService: Filtering by UID', [
+                'last_synced_uid' => $account->last_synced_uid
+            ]);
+
             $messages = $messages->filter(function (Message $message) use ($account) {
                 return (int) $message->getUid() > (int) $account->last_synced_uid;
             });
+
+            Log::info('MailboxSyncService: After UID filter', [
+                'count' => $messages->count(),
+                'last_synced_uid' => $account->last_synced_uid,
+            ]);
         }
 
-        // Sort by UID
-        $messages = $messages->sortBy(function (Message $message) {
-            return (int) $message->getUid();
+        // Sort by the actual received date so callers always process most recent emails first
+        $messages = $messages->sortByDesc(function (Message $message) {
+            return $this->getMessageReceivedTimestamp($message);
         })->values();
 
         return $messages;
+    }
+
+    protected function getMessageReceivedTimestamp(Message $message): int
+    {
+        $dateAttr = $message->getDate();
+
+        if ($dateAttr instanceof \DateTimeInterface) {
+            return $dateAttr->getTimestamp();
+        }
+
+        if ($dateAttr && method_exists($dateAttr, 'toDate')) {
+            $normalized = $dateAttr->toDate();
+
+            if ($normalized instanceof \DateTimeInterface) {
+                return $normalized->getTimestamp();
+            }
+
+            if (is_string($normalized)) {
+                return strtotime($normalized) ?: 0;
+            }
+        }
+
+        if (is_string($dateAttr)) {
+            return strtotime($dateAttr) ?: 0;
+        }
+
+        return 0;
     }
 
     protected function determineSince(EmailAccount $account): ?string
@@ -136,12 +190,7 @@ class MailboxSyncService
     protected function storeMessage(EmailAccount $account, Message $message): Email
     {
         $messageId = $this->resolveMessageId($message);
-
-        // Get date and convert to Carbon instance properly
-        $dateAttr = $message->getDate();
-        $receivedAt = $dateAttr && method_exists($dateAttr, 'toDate')
-            ? \Carbon\Carbon::parse($dateAttr->toDate())->setTimezone('UTC')
-            : now();
+        $receivedAt = $this->resolveReceivedAt($message);
 
         $snippet = $this->buildSnippet($message);
 
@@ -169,6 +218,15 @@ class MailboxSyncService
         $this->recordAttachmentMetadata($email, $message);
 
         return $email;
+    }
+
+    protected function resolveReceivedAt(Message $message): \Carbon\Carbon
+    {
+        $timestamp = $this->getMessageReceivedTimestamp($message);
+
+        return $timestamp > 0
+            ? \Carbon\Carbon::createFromTimestamp($timestamp)->setTimezone('UTC')
+            : now();
     }
 
     protected function syncParticipants(Email $email, Message $message): void
